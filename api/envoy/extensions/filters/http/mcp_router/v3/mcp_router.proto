@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package envoy.extensions.filters.http.mcp_router.v3;
 
+import "envoy/extensions/transport_sockets/tls/v3/secret.proto";
 import "envoy/type/metadata/v3/metadata.proto";
 
 import "google/protobuf/duration.proto";
@@ -125,4 +126,15 @@ message McpRouter {
   // If set, extracts a request "subject" and binds it into the MCP session.
   // If not set, sessions are created without identity binding.
   SessionIdentity session_identity = 2;
+
+  // Configuration for session ID encryption key.
+  //
+  // When set, session IDs are encrypted using AES-256-GCM authenticated encryption
+  // to prevent tampering and information disclosure.
+  //
+  // The SDS service is for a :ref:`GenericSecret <envoy_v3_api_msg_extensions.transport_sockets.tls.v3.GenericSecret>`.
+  // The secret must contain exactly 32 bytes for the AES-256 encryption key.
+  //
+  // If not set, session IDs are only Base64-encoded (not recommended for production).
+  transport_sockets.tls.v3.SdsSecretConfig encryption_key = 3;
 }

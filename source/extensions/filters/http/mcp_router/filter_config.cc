@@ -1,11 +1,26 @@
 #include "source/extensions/filters/http/mcp_router/filter_config.h"
 
+#include "envoy/secret/secret_manager.h"
+
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace McpRouter {
 
 namespace {
+
+Secret::GenericSecretConfigProviderSharedPtr
+getSecretProvider(const envoy::extensions::transport_sockets::tls::v3::SdsSecretConfig& config,
+                  Server::Configuration::ServerFactoryContext& server_context,
+                  Init::Manager& init_manager) {
+  if (config.has_sds_config()) {
+    return server_context.secretManager().findOrCreateGenericSecretProvider(
+        config.sds_config(), config.name(), server_context, init_manager);
+  } else {
+    return server_context.secretManager().findStaticGenericSecretProvider(config.name());
+  }
+}
+
 SessionIdentityConfig
 parseSessionIdentity(const envoy::extensions::filters::http::mcp_router::v3::McpRouter& config) {
   SessionIdentityConfig result;
@@ -64,6 +79,32 @@ McpRouterConfig::McpRouterConfig(
   if (backends_.size() == 1) {
     default_backend_name_ = backends_[0].name;
   }
+
+  // Initialize encryption key provider if configured.
+  if (proto_config.has_encryption_key()) {
+    encryption_key_provider_ =
+        getSecretProvider(proto_config.encryption_key(), context.serverFactoryContext(),
+                          context.initManager());
+  }
+}
+
+std::string McpRouterConfig::encryptionKey() const {
+  if (encryption_key_provider_ == nullptr) {
+    return "";
+  }
+  const auto* secret = encryption_key_provider_->secret();
+  if (secret == nullptr || !secret->has_secret()) {
+    return "";
+  }
+  const auto& data_source = secret->secret();
+  if (data_source.specifier_case() ==
+      envoy::config::core::v3::DataSource::SpecifierCase::kInlineBytes) {
+    return data_source.inline_bytes();
+  } else if (data_source.specifier_case() ==
+             envoy::config::core::v3::DataSource::SpecifierCase::kInlineString) {
+    return data_source.inline_string();
+  }
+  return "";
 }
 
 const McpBackendConfig* McpRouterConfig::findBackend(const std::string& name) const {

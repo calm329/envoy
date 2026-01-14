@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "envoy/extensions/filters/http/mcp_router/v3/mcp_router.pb.h"
+#include "envoy/secret/secret_provider.h"
 #include "envoy/server/filter_config.h"
 
 #include "absl/types/variant.h"
@@ -74,11 +75,22 @@ public:
     return session_identity_.validation_mode == ValidationMode::Enforce;
   }
 
+  /**
+   * @return the encryption key for session IDs, or empty string if not configured.
+   */
+  std::string encryptionKey() const;
+
+  /**
+   * @return true if session ID encryption is enabled.
+   */
+  bool hasEncryptionKey() const { return encryption_key_provider_ != nullptr; }
+
 private:
   std::vector<McpBackendConfig> backends_;
   std::string default_backend_name_;
   Server::Configuration::FactoryContext& factory_context_;
   SessionIdentityConfig session_identity_;
+  Secret::GenericSecretConfigProviderSharedPtr encryption_key_provider_;
 };
 
 using McpRouterConfigSharedPtr = std::shared_ptr<McpRouterConfig>;

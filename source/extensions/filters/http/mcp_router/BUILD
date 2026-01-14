@@ -15,6 +15,7 @@ envoy_cc_library(
     hdrs = ["session_codec.h"],
     deps = [
         "//source/common/common:base64_lib",
+        "@boringssl//:ssl",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -27,6 +28,8 @@ envoy_cc_library(
     srcs = ["filter_config.cc"],
     hdrs = ["filter_config.h"],
     deps = [
+        "//envoy/secret:secret_manager_interface",
+        "//envoy/secret:secret_provider_interface",
         "//envoy/server:filter_config_interface",
         "@com_google_absl//absl/types:variant",
         "@envoy_api//envoy/extensions/filters/http/mcp_router/v3:pkg_cc_proto",

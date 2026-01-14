@@ -314,11 +314,25 @@ bool McpRouterFilter::readMetadataFromMcpFilter() {
 }
 
 bool McpRouterFilter::decodeAndParseSession() {
-  std::string decoded = SessionCodec::decode(encoded_session_id_);
-  if (decoded.empty()) {
-    ENVOY_LOG(warn, "Failed to decode session ID");
-    sendHttpError(400, "Invalid session ID");
-    return false;
+  std::string decoded;
+
+  // Use encryption if configured, otherwise fall back to Base64 decoding.
+  if (config_->hasEncryptionKey()) {
+    std::string key = config_->encryptionKey();
+    auto decrypt_result = SessionCodec::decodeAndDecrypt(encoded_session_id_, key);
+    if (!decrypt_result.ok()) {
+      ENVOY_LOG(warn, "Failed to decrypt session ID: {}", decrypt_result.status().message());
+      sendHttpError(400, "Invalid session ID");
+      return false;
+    }
+    decoded = *decrypt_result;
+  } else {
+    decoded = SessionCodec::decode(encoded_session_id_);
+    if (decoded.empty() && !encoded_session_id_.empty()) {
+      ENVOY_LOG(warn, "Failed to decode session ID");
+      sendHttpError(400, "Invalid session ID");
+      return false;
+    }
   }
 
   auto parsed = SessionCodec::parseCompositeSessionId(decoded);
@@ -727,7 +741,20 @@ void McpRouterFilter::handleInitialize() {
     }
 
     std::string composite = SessionCodec::buildCompositeSessionId(route_name_, subject, sessions);
-    std::string encoded_session = SessionCodec::encode(composite);
+
+    // Use encryption if configured, otherwise fall back to Base64 encoding.
+    std::string encoded_session;
+    if (config_->hasEncryptionKey()) {
+      std::string key = config_->encryptionKey();
+      encoded_session = SessionCodec::encryptAndEncode(composite, key);
+      if (encoded_session.empty()) {
+        ENVOY_LOG(error, "Failed to encrypt session ID");
+        sendHttpError(500, "Failed to create session");
+        return;
+      }
+    } else {
+      encoded_session = SessionCodec::encode(composite);
+    }
 
     sendJsonResponse(response_body, encoded_session);
   });
